@@ -108,7 +108,29 @@ async function send(act, label) {
     body: JSON.stringify({message: label, branch: 'inbox', content: btoa(body)})});
   if (!r.ok) { const j = await r.json().catch(() => ({})); toast('GitHub: ' + (j.message || r.status), 5000); return false }
   LS.set('pending', [...pending(), {...act, id, label, at: Date.now()}]);
-  closeSheet(); render(); toast('📨 ' + label + ' – wird beim nächsten PC-Update übernommen', 3500); return true }
+  closeSheet(); render(true);
+  if (S.cloud_repo) cloudRun(true, '📨 ' + label + ' – die Cloud übernimmt das (ca. 1–3 min)');
+  else toast('📨 ' + label + ' – wird beim nächsten PC-Update übernommen', 3500);
+  return true }
+
+// ------------------------------------------------------------------ Cloud-Lauf (GitHub Actions) anstoßen
+let CLOUD = null;  // {since, timer}
+async function cloudRun(quiet, msg) {
+  const token = LS.get('token');
+  if (!token) { openSettings('Zum Aktualisieren über die Cloud braucht die App einen GitHub-Token.'); return }
+  const r = await fetch(`https://api.github.com/repos/${S.cloud_repo}/actions/workflows/radcoach.yml/dispatches`, {method: 'POST',
+    headers: {Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json'},
+    body: JSON.stringify({ref: 'main'})});
+  if (!r.ok) { const j = await r.json().catch(() => ({}));
+    toast(r.status === 403 || r.status === 404 ? '⚠️ Dem Handy-Token fehlt das Recht „Actions“ für ' + S.cloud_repo : 'GitHub: ' + (j.message || r.status), 6000); return }
+  toast(msg || '☁️ Cloud holt neue Fahrten und rechnet – ca. 1–3 min', 4000);
+  const since = S.generated; clearInterval(CLOUD && CLOUD.timer);
+  CLOUD = {since, started: Date.now(), timer: setInterval(async () => {
+    try { const env = await fetchEnv(), s = await unseal(env, KEYS);
+      if (s.generated !== since) { ENV = env; S = s; LS.set('cache', env); clearInterval(CLOUD.timer); CLOUD = null; reconcile(); render(true); toast('✅ Aktualisiert – Stand: ' + ago(S.generated)); return } } catch {}
+    if (Date.now() - CLOUD.started > 6 * 60e3) { clearInterval(CLOUD.timer); CLOUD = null; render(); toast('Die Cloud braucht länger – später nochmal ⟳') }
+    else render(true) }, 15000)};
+  render(true) }
 const pendingFor = d => pending().filter(p => (p.to || p.date || p.slot || p.from || '').slice(0, 10) === d || (p.from || p.slot || '').slice(0, 10) === d);
 function countOn(d) {
   const day = S.days[d]; let n = day && day.items ? day.items.length : 0;
@@ -137,11 +159,12 @@ function tags(w) {
 const pendTag = d => pendingFor(d).length ? `<span class="tag warn">⏳ ${pendingFor(d).map(p => p.label).join(' · ')}</span>` : '';
 
 // ------------------------------------------------------------------ Seiten
-function render() {
+function render(keep) {
+  const y = window.scrollY;
   $('#tabs').classList.remove('hidden');
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   $('#app').innerHTML = ({today: pageToday, plan: pagePlan, history: pageHistory, form: pageForm})[tab]();
-  window.scrollTo(0, 0) }
+  window.scrollTo(0, keep ? y : 0) }
 
 function header(title, sub) {
   return `<div class="top"><div><div class="sub">${sub}</div><h1>${title}</h1></div>
@@ -153,7 +176,9 @@ function pageToday() {
   const hi = h < 11 ? 'Guten Morgen' : h < 18 ? 'Servus' : 'Guten Abend';
   const left = Math.round((D(S.goal.date) - D(t)) / 864e5);
   let html = header(`${hi}${S.name ? ' ' + esc(S.name.split(' ')[0]) : ''} 👋`, `Noch <b>${left} Tage</b> bis ${esc(S.goal.name)}`);
-  if (Date.now() - new Date(S.generated) > 36 * 3600e3) html += `<div class="banner">🕰️ Stand vom PC: ${ago(S.generated)}. Neue Fahrten und Planänderungen kommen erst, wenn am PC radcoach läuft (Web-App oder Update) – ⟳ am Handy lädt nur den zuletzt hochgeladenen Stand.</div>`;
+  if (CLOUD) html += `<div class="banner">☁️ <span class="spin">⟳</span> Die Cloud holt neue Fahrten und rechnet … seit ${Math.round((Date.now() - CLOUD.started) / 1000)} s (meist 1–3 min)</div>`;
+  else if (S.cloud_repo && Date.now() - new Date(S.generated) > 3 * 3600e3) html += `<div class="banner">🕰️ Stand: ${ago(S.generated)} – tippe oben auf ⟳, dann holt die Cloud neue Fahrten von Wahoo.</div>`;
+  else if (!S.cloud_repo && Date.now() - new Date(S.generated) > 36 * 3600e3) html += `<div class="banner">🕰️ Stand vom PC: ${ago(S.generated)}. Neue Fahrten und Planänderungen kommen erst, wenn am PC radcoach läuft (Web-App oder Update) – ⟳ am Handy lädt nur den zuletzt hochgeladenen Stand.</div>`;
   const rides = day.rides || [];
   if (day.event) html += `<div class="hero race"><div class="k">Heute</div><div class="t">${esc(day.event)} 🏁</div><div class="meta">Viel Erfolg – genieß es!</div></div>`;
   else if (items.length) {
@@ -340,7 +365,7 @@ function openSettings(msg) {
   const rp = repo(), tok = LS.get('token');
   openSheet(`<h2 style="margin-top:4px">Einstellungen</h2>${msg ? `<div class="banner">${esc(msg)}</div>` : ''}
     <div class="sub" style="margin-bottom:6px"><b>Änderungen vom Handy</b> (Gefühl, Verschieben, Nachholen) landen verschlüsselt in deinem Repo <b>${esc(rp || '?')}</b>, der PC holt sie beim nächsten Update ab.
-    Dafür braucht die App einen GitHub-Token (Fine-grained, nur dieses Repo, „Contents: Read and write“).</div>
+    Dafür braucht die App einen GitHub-Token (Fine-grained, nur dieses Repo, „Contents: Read and write“)${S.cloud_repo ? `, für ⟳ zusätzlich <b>${esc(S.cloud_repo)}</b> mit „Actions: Read and write“` : ""}.</div>
     ${tok ? `<div class="banner" style="background:color-mix(in srgb,var(--good) 14%,var(--card))">✅ <b>Token ist gespeichert</b> (…${esc(tok.slice(-4))}) – Änderungen vom Handy sind aktiv. Nichts weiter zu tun.</div>
     <div class="chips"><button class="chip ghost" onclick="$('#tokbox').classList.toggle('hidden')">Token ersetzen</button>
     <button class="chip ghost" onclick="LS.del('token');closeSheet();toast('Token entfernt')">Token entfernen</button></div>` : ''}
@@ -354,7 +379,9 @@ function saveToken() { const v = $('#tok').value.trim(); if (!v) return toast('B
   LS.set('token', v); closeSheet(); toast('Token gespeichert ✓') }
 function logout() { if (!confirm('Abmelden? Passwort und Token werden von diesem Handy gelöscht.')) return;
   ['keys', 'salt', 'token', 'cache', 'pending'].forEach(LS.del); location.reload() }
-async function refresh(btn) { btn.innerHTML = '<span class="spin">⟳</span>'; await load(false) }
+async function refresh(btn) { btn.innerHTML = '<span class="spin">⟳</span>';
+  if (S && S.cloud_repo && LS.get('token') && !CLOUD) return cloudRun();
+  await load(false) }
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; render() });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && KEYS) load(true) });
