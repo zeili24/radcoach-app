@@ -153,7 +153,7 @@ function pageToday() {
   const hi = h < 11 ? 'Guten Morgen' : h < 18 ? 'Servus' : 'Guten Abend';
   const left = Math.round((D(S.goal.date) - D(t)) / 864e5);
   let html = header(`${hi}${S.name ? ' ' + esc(S.name.split(' ')[0]) : ''} 👋`, `Noch <b>${left} Tage</b> bis ${esc(S.goal.name)}`);
-  if (Date.now() - new Date(S.generated) > 36 * 3600e3) html += `<div class="banner">🕰️ Stand vom PC: ${ago(S.generated)} – am PC ein Update machen, damit alles aktuell ist.</div>`;
+  if (Date.now() - new Date(S.generated) > 36 * 3600e3) html += `<div class="banner">🕰️ Stand vom PC: ${ago(S.generated)}. Neue Fahrten und Planänderungen kommen erst, wenn am PC radcoach läuft (Web-App oder Update) – ⟳ am Handy lädt nur den zuletzt hochgeladenen Stand.</div>`;
   const rides = day.rides || [];
   if (day.event) html += `<div class="hero race"><div class="k">Heute</div><div class="t">${esc(day.event)} 🏁</div><div class="meta">Viel Erfolg – genieß es!</div></div>`;
   else if (items.length) {
@@ -173,6 +173,11 @@ function pageToday() {
     <div class="tile"><div class="v">${Math.round(c.ctl)}</div><div class="l">Fitness</div></div>
     <div class="tile"><div class="v">${Math.round(c.atl)}</div><div class="l">Ermüdung</div></div>
     <div class="tile"><div class="v" style="color:${c.tsb > 5 ? 'var(--good)' : c.tsb < -20 ? 'var(--bad)' : c.tsb < -10 ? 'var(--warn)' : 'inherit'}">${c.tsb > 0 ? '+' : ''}${Math.round(c.tsb)}</div><div class="l">Form</div></div></div>`;
+
+  const f = S.forecast;
+  if (f) html += `<div class="card fc ${f.status}" onclick="tab='form';render()" style="cursor:pointer;display:flex;align-items:center;gap:12px">
+    <span style="font-size:28px">${f.icon}</span><div class="grow"><div class="muted">Zielzeit-Prognose</div>
+    <div class="nm" style="font-size:19px">${f.pred_txt} h <span class="muted">· Ziel ${f.target_txt} h · ${esc(f.label)}</span></div></div><div class="right">›</div></div>`;
 
   // Gefühl nachtragen / verpasste Einheiten nachholen
   const todo = [];
@@ -256,6 +261,19 @@ function pageForm() {
     microbursts: 'Microbursts', anaerobic: 'Anaerob', tempo: 'Tempo', endurance_tempo: 'Grundlage+Tempo', durability: 'Lang+Finale',
     race_sim: 'Rennsimulation', climbing: 'Kraftausdauer'};
   let html = header('Form & Ziel', esc(S.goal.name) + ' · ' + dlabel(S.goal.date) + D(S.goal.date).getFullYear());
+  const f = S.forecast;
+  if (f) {
+    const lo = Math.min(f.fast, f.target) - .05, hi = Math.max(f.slow, f.target, f.full) + .05, X = h => ((h - lo) / (hi - lo) * 100).toFixed(1);
+    html += `<div class="card fc ${f.status}"><div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px">${f.icon}</span>
+      <span style="font-size:28px;font-weight:750">${f.pred_txt} h</span><span class="muted">${esc(f.range_txt)} h</span></div>
+      <div class="sub">Zielzeit-Prognose · Ziel ${f.target_txt} h · <b>${esc(f.label)}</b></div>
+      <div class="fcbar"><i class="rng" style="left:${X(f.fast)}%;width:${X(f.slow) - X(f.fast)}%"></i><i class="tgt" style="left:${X(f.target)}%"></i><i class="dot" style="left:${X(f.pred)}%"></i></div>
+      <div class="muted" style="display:flex;justify-content:space-between"><span>schneller</span><span>▮ Ziel · ● Prognose</span><span>langsamer</span></div>
+      <div class="tiles" style="grid-template-columns:repeat(3,1fr);margin:12px 0 4px">
+      <div class="tile" style="box-shadow:none;background:var(--card2)"><div class="v">${f.ftp_race}</div><div class="l">FTP Renntag</div></div>
+      <div class="tile" style="box-shadow:none;background:var(--card2)"><div class="v">${Math.round(f.ctl_peak_real)}</div><div class="l">Fitness-Spitze</div></div>
+      <div class="tile" style="box-shadow:none;background:var(--card2)"><div class="v">${f.compliance == null ? '–' : Math.round(f.compliance * 100) + '%'}</div><div class="l">Umsetzung</div></div></div>
+      <ul class="tips">${f.advice.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` }
   html += `<div class="card">${chart()}</div>`;
   const gap = e.ftp_need ? e.ftp_need - S.ftp : null;
   html += `<div class="tiles" style="grid-template-columns:repeat(3,1fr)"><div class="tile"><div class="v">${S.ftp}</div><div class="l">FTP jetzt</div></div>
@@ -323,9 +341,11 @@ function openSettings(msg) {
   openSheet(`<h2 style="margin-top:4px">Einstellungen</h2>${msg ? `<div class="banner">${esc(msg)}</div>` : ''}
     <div class="sub" style="margin-bottom:6px"><b>Änderungen vom Handy</b> (Gefühl, Verschieben, Nachholen) landen verschlüsselt in deinem Repo <b>${esc(rp || '?')}</b>, der PC holt sie beim nächsten Update ab.
     Dafür braucht die App einen GitHub-Token (Fine-grained, nur dieses Repo, „Contents: Read and write“).</div>
-    <input class="field" id="tok" type="password" placeholder="${tok ? 'Token gespeichert ✓ – neu eingeben zum Ersetzen' : 'github_pat_…'}" autocomplete="off">
-    <div class="chips" style="margin-top:10px"><button class="chip primary" onclick="saveToken()">Token speichern</button>
-    ${tok ? '<button class="chip ghost" onclick="LS.del(\'token\');closeSheet();toast(\'Token entfernt\')">Token entfernen</button>' : ''}</div>
+    ${tok ? `<div class="banner" style="background:color-mix(in srgb,var(--good) 14%,var(--card))">✅ <b>Token ist gespeichert</b> (…${esc(tok.slice(-4))}) – Änderungen vom Handy sind aktiv. Nichts weiter zu tun.</div>
+    <div class="chips"><button class="chip ghost" onclick="$('#tokbox').classList.toggle('hidden')">Token ersetzen</button>
+    <button class="chip ghost" onclick="LS.del('token');closeSheet();toast('Token entfernt')">Token entfernen</button></div>` : ''}
+    <div id="tokbox" class="${tok ? 'hidden' : ''}" style="margin-top:10px"><input class="field" id="tok" type="password" placeholder="github_pat_…" autocomplete="off">
+    <div class="chips" style="margin-top:10px"><button class="chip primary" onclick="saveToken()">Token speichern</button></div></div>
     ${pending().length ? `<h2>Wartet auf den PC</h2><div class="card" style="margin:0">${pending().map(p => `<div class="muted">⏳ ${esc(p.label)}</div>`).join('')}</div>` : ''}
     <h2>App</h2><div class="sub">Stand vom PC: ${ago(S.generated)} · FTP ${S.ftp} W</div>
     <div class="chips" style="margin-top:10px"><button class="chip ghost" onclick="logout()">🔒 Abmelden</button></div>`) }

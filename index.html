@@ -88,6 +88,10 @@ border-radius:16px;padding:12px 16px;font-size:14px;box-shadow:0 8px 30px rgba(0
 .lv{display:grid;grid-template-columns:1fr 2fr 34px;gap:10px;align-items:center;font-size:14px;padding:5px 0}
 .chart text{font-size:10px;fill:var(--muted)}
 ul.tips{padding-left:18px;margin:6px 0} ul.tips li{margin:5px 0;font-size:14px;color:var(--text2)}
+.fc{border-left:5px solid var(--fc)} .fc.green{--fc:var(--good)} .fc.yellow{--fc:var(--warn)} .fc.red{--fc:var(--bad)}
+.fcbar{position:relative;height:30px;margin:12px 4px 2px} .fcbar:before{content:"";position:absolute;top:13px;left:0;right:0;height:4px;border-radius:2px;background:var(--card2)}
+.fcbar i{position:absolute;display:block} .fcbar .rng{top:9px;height:12px;border-radius:6px;background:var(--fc);opacity:.35}
+.fcbar .tgt{top:2px;height:26px;width:3px;background:var(--text)} .fcbar .dot{top:7px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:var(--fc);border:2px solid var(--card)}
 .hidden{display:none!important} .spin{animation:sp 1s linear infinite;display:inline-block}@keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
