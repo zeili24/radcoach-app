@@ -59,6 +59,12 @@ async function seal(obj, k) {
 // ------------------------------------------------------------------ Laden
 let KEYS = null, ENV = null;
 async function fetchEnv() {
+  // mit Token direkt aus dem Repo lesen – GitHub Pages braucht nach jedem Lauf ~40 s + CDN, bis es die neue Datei ausliefert
+  const token = LS.get('token'), rp = repo();
+  if (token && rp) try {
+    const r = await fetch(`https://api.github.com/repos/${rp}/contents/data.enc?ref=main&t=${Date.now()}`, {cache: 'no-store',
+      headers: {Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.raw'}});
+    if (r.ok) return r.json() } catch {}
   const r = await fetch('data.enc?t=' + Date.now(), {cache: 'no-store'});
   if (!r.ok) throw new Error('Noch keine Daten – am PC einmal ein Update machen.');
   return r.json() }
@@ -109,9 +115,18 @@ async function send(act, label) {
   if (!r.ok) { const j = await r.json().catch(() => ({})); toast('GitHub: ' + (j.message || r.status), 5000); return false }
   LS.set('pending', [...pending(), {...act, id, label, at: Date.now()}]);
   closeSheet(); render(true);
-  if (S.cloud_repo) cloudRun(true, '📨 ' + label + ' – die Cloud übernimmt das (ca. 1–3 min)');
-  else toast('📨 ' + label + ' – wird beim nächsten PC-Update übernommen', 3500);
+  if (!S.cloud_repo) toast('📨 ' + label + ' – wird beim nächsten PC-Update übernommen', 3500);
+  else if (act.type === 'rpe' || act.type === 'feedback') toast('✅ ' + label + ' gespeichert – die Cloud übernimmt es beim nächsten Lauf', 3500);
+  else soon(label);
   return true }
+
+// Plan-Änderungen sammeln: erst 10 s nach der letzten Änderung einen Cloud-Lauf starten (mehrere Änderungen = ein Lauf).
+// Wird die App vorher geschlossen, startet der Lauf sofort.
+let SOON = null;
+function soon(label) {
+  clearTimeout(SOON); SOON = setTimeout(flushSoon, 10000);
+  toast('📨 ' + label + ' – geht in 10 s an die Cloud', 3000) }
+function flushSoon() { if (SOON) { clearTimeout(SOON); SOON = null; cloudRun(true, '☁️ Änderungen gehen an die Cloud (ca. 30–60 s)') } }
 
 // ------------------------------------------------------------------ Cloud-Lauf (GitHub Actions) anstoßen
 let CLOUD = null;  // {since, timer}
@@ -123,13 +138,13 @@ async function cloudRun(quiet, msg) {
     body: JSON.stringify({ref: 'main'})});
   if (!r.ok) { const j = await r.json().catch(() => ({}));
     toast(r.status === 403 || r.status === 404 ? '⚠️ Dem Handy-Token fehlt das Recht „Actions“ für ' + S.cloud_repo : 'GitHub: ' + (j.message || r.status), 6000); return }
-  toast(msg || '☁️ Cloud holt neue Fahrten und rechnet – ca. 1–3 min', 4000);
+  toast(msg || '☁️ Cloud holt neue Fahrten und rechnet – ca. 30–60 s', 4000);
   const since = S.generated; clearInterval(CLOUD && CLOUD.timer);
   CLOUD = {since, started: Date.now(), timer: setInterval(async () => {
     try { const env = await fetchEnv(), s = await unseal(env, KEYS);
       if (s.generated !== since) { ENV = env; S = s; LS.set('cache', env); clearInterval(CLOUD.timer); CLOUD = null; reconcile(); render(true); toast('✅ Aktualisiert – Stand: ' + ago(S.generated)); return } } catch {}
-    if (Date.now() - CLOUD.started > 6 * 60e3) { clearInterval(CLOUD.timer); CLOUD = null; render(); toast('Die Cloud braucht länger – später nochmal ⟳') }
-    else render(true) }, 15000)};
+    if (Date.now() - CLOUD.started > 5 * 60e3) { clearInterval(CLOUD.timer); CLOUD = null; render(); toast('Die Cloud braucht länger – später nochmal ⟳') }
+    else render(true) }, 5000)};
   render(true) }
 const pendingFor = d => pending().filter(p => (p.to || p.date || p.slot || p.from || '').slice(0, 10) === d || (p.from || p.slot || '').slice(0, 10) === d);
 function countOn(d) {
@@ -176,7 +191,7 @@ function pageToday() {
   const hi = h < 11 ? 'Guten Morgen' : h < 18 ? 'Servus' : 'Guten Abend';
   const left = Math.round((D(S.goal.date) - D(t)) / 864e5);
   let html = header(`${hi}${S.name ? ' ' + esc(S.name.split(' ')[0]) : ''} 👋`, `Noch <b>${left} Tage</b> bis ${esc(S.goal.name)}`);
-  if (CLOUD) html += `<div class="banner">☁️ <span class="spin">⟳</span> Die Cloud holt neue Fahrten und rechnet … seit ${Math.round((Date.now() - CLOUD.started) / 1000)} s (meist 1–3 min)</div>`;
+  if (CLOUD) html += `<div class="banner">☁️ <span class="spin">⟳</span> Die Cloud holt neue Fahrten und rechnet … seit ${Math.round((Date.now() - CLOUD.started) / 1000)} s (meist 30–60 s) – du kannst normal weitermachen</div>`;
   else if (S.cloud_repo && Date.now() - new Date(S.generated) > 3 * 3600e3) html += `<div class="banner">🕰️ Stand: ${ago(S.generated)} – tippe oben auf ⟳, dann holt die Cloud neue Fahrten von Wahoo.</div>`;
   else if (!S.cloud_repo && Date.now() - new Date(S.generated) > 36 * 3600e3) html += `<div class="banner">🕰️ Stand vom PC: ${ago(S.generated)}. Neue Fahrten und Planänderungen kommen erst, wenn am PC radcoach läuft (Web-App oder Update) – ⟳ am Handy lädt nur den zuletzt hochgeladenen Stand.</div>`;
   const rides = day.rides || [];
@@ -380,10 +395,10 @@ function saveToken() { const v = $('#tok').value.trim(); if (!v) return toast('B
 function logout() { if (!confirm('Abmelden? Passwort und Token werden von diesem Handy gelöscht.')) return;
   ['keys', 'salt', 'token', 'cache', 'pending'].forEach(LS.del); location.reload() }
 async function refresh(btn) { btn.innerHTML = '<span class="spin">⟳</span>';
-  if (S && S.cloud_repo && LS.get('token') && !CLOUD) return cloudRun();
+  if (S && S.cloud_repo && LS.get('token') && !CLOUD) { clearTimeout(SOON); SOON = null; return cloudRun() }
   await load(false) }
 
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; render() });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && KEYS) load(true) });
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSoon(); else if (KEYS && !CLOUD) load(true) });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 load(true);
