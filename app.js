@@ -297,7 +297,7 @@ function chart() {
     <div class="muted"><span style="color:var(--accent)">━</span> Fitness (gestrichelt: Prognose bis zum Rennen) · <span style="color:var(--hot)">━</span> Ermüdung · Balken: Form</div>` }
 
 function pageForm() {
-  const e = S.event || {}; const NAMES = {sweetspot: 'Sweet Spot', threshold: 'Schwelle', over_under: 'Over-Unders', vo2max: 'VO2max',
+  const e = S.event || {}; const NAMES = {sweetspot: 'Sweet Spot', threshold: 'Schwelle', over_under: 'Over-Unders', vo2max: 'VO2max', pyramid: 'Pyramide',
     microbursts: 'Microbursts', anaerobic: 'Anaerob', tempo: 'Tempo', endurance_tempo: 'Grundlage+Tempo', durability: 'Lang+Finale',
     race_sim: 'Rennsimulation', climbing: 'Kraftausdauer'};
   let html = header('Form & Ziel', esc(S.goal.name) + ' · ' + dlabel(S.goal.date) + D(S.goal.date).getFullYear());
