@@ -268,6 +268,7 @@ function pageHistory() {
     let body = x.rides.map(r => `<div class="nm">${esc(r.name)}</div><div class="muted">${mins(r.dur)} min · ${r.tss} TSS${r.np ? ' · NP ' + r.np + ' W' : ''}${r.km ? ' · ' + r.km + ' km' : ''}</div>`).join('');
     const pl = x.planned, cu = pl && pl.catchup_of;
     if (pl) body += `<div class="muted">${cu ? '↻ ' : pl.swapped_from ? '⇄ ' : 'Plan: '}${esc(pl.name)} ${st ? st[0] + ' ' + esc(ev.text || st[1]) : ''}${cu ? '<br>nachgeholt vom ' + dlabel(cu) : pl.swapped_from ? '<br>am BOLT gewählt statt ' + esc(pl.swapped_from) : ''}</div>`;
+    if (x.planned2) { const s2 = x.eval2 && STATUS[x.eval2.status]; body += `<div class="muted">Plan: ${esc(x.planned2.name)} ${s2 ? s2[0] + ' ' + esc(x.eval2.text || s2[1]) : ''}</div>` }
     if (!body) body = '<div class="nm" style="color:var(--muted);font-weight:500">Ruhetag</div>';
     if (x.catch && x.catch !== 'open') body += `<span class="tag blue">↻ nachgeholt am ${dlabel(x.catch)}</span>`;
     const act = x.rides.length ? `<button class="chip ${rpe ? 'on' : 'ghost'}" onclick="event.stopPropagation();openRpe('${d}')">${rpe ? (myRpe ? '⏳ ' : '') + rpe + '/10' : 'Gefühl?'}</button>`
