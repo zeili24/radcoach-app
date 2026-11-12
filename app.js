@@ -266,7 +266,8 @@ function pageHistory() {
     const myRpe = (pending().find(p => p.type === 'rpe' && p.date === d) || {}).rpe;
     const rpe = myRpe || x.rpe;
     let body = x.rides.map(r => `<div class="nm">${esc(r.name)}</div><div class="muted">${mins(r.dur)} min · ${r.tss} TSS${r.np ? ' · NP ' + r.np + ' W' : ''}${r.km ? ' · ' + r.km + ' km' : ''}</div>`).join('');
-    if (x.planned) body += `<div class="muted">${x.planned.swapped_from ? '⇄ ' : 'Plan: '}${esc(x.planned.name)} ${st ? st[0] + ' ' + esc(ev.text || st[1]) : ''}${x.planned.swapped_from ? '<br>am BOLT gewählt statt ' + esc(x.planned.swapped_from) : ''}</div>`;
+    const pl = x.planned, cu = pl && pl.catchup_of;
+    if (pl) body += `<div class="muted">${cu ? '↻ ' : pl.swapped_from ? '⇄ ' : 'Plan: '}${esc(pl.name)} ${st ? st[0] + ' ' + esc(ev.text || st[1]) : ''}${cu ? '<br>nachgeholt vom ' + dlabel(cu) : pl.swapped_from ? '<br>am BOLT gewählt statt ' + esc(pl.swapped_from) : ''}</div>`;
     if (!body) body = '<div class="nm" style="color:var(--muted);font-weight:500">Ruhetag</div>';
     if (x.catch && x.catch !== 'open') body += `<span class="tag blue">↻ nachgeholt am ${dlabel(x.catch)}</span>`;
     const act = x.rides.length ? `<button class="chip ${rpe ? 'on' : 'ghost'}" onclick="event.stopPropagation();openRpe('${d}')">${rpe ? (myRpe ? '⏳ ' : '') + rpe + '/10' : 'Gefühl?'}</button>`
@@ -364,7 +365,7 @@ function skip(slot) { const w = findSlot(slot); if (!w || !confirm(`${w.name} am
 function openCatch(d) { const x = S.days[d];
   openSheet(`<div class="sub">verpasst am ${dlabel(d)}</div><h2 style="margin:2px 0 4px">${esc(x.planned.name)} nachholen</h2>
     <div class="sub">Die Einheit kommt am gewählten Tag dazu und wird an den BOLT gesendet.</div>
-    <div style="margin:12px 0 4px">${profile(x.planned, 60)}</div>${targets(`(t=>send({type:'catchup',from:'${d}',to:t},'${esc(x.planned.name).replace(/'/g, '')} nachholen → '+dnice(t)))`, null)}`) }
+    <div style="margin:12px 0 4px">${profile(x.planned, 60)}</div>${(S.days[TODAY()] || {}).rides?.length ? `<button class="chip" style="margin-top:8px" onclick="send({type:'catchup',from:'${d}',to:'${TODAY()}'},'heutige Fahrt = ${esc(x.planned.name).replace(/'/g, '')} vom ${dlabel(d)}')">✓ heute schon gefahren</button>` : ''}${targets(`(t=>send({type:'catchup',from:'${d}',to:t},'${esc(x.planned.name).replace(/'/g, '')} nachholen → '+dnice(t)))`, null)}`) }
 function openPast(d) { const x = S.days[d]; if (x.catch === 'open') return openCatch(d);
   openSheet(`<div class="sub">${dlabel(d)}</div><h2 style="margin:2px 0">${esc(x.planned.name)}</h2><div class="sub">${x.eval ? STATUS[x.eval.status]?.join(' ') : ''}</div><div style="margin-top:12px">${profile(x.planned, 60)}</div>`) }
 
